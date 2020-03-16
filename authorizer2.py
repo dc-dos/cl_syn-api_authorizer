@@ -24,16 +24,18 @@ import boto3
 DDB_TABLE = os.environ['DDB_TABLE']
 
 AWSPolicy = {
-    "principalId": '*',
-    "Version": "2012-10-17",
-    "Statement": [
+  "principalId": "*", 
+  "policyDocument": {
+  "Version": "2012-10-17",
+  "Statement": [
         {
         "Action": "execute-api:Invoke",
         "Effect": "Deny",
         "Resource": None
         }
-    ],
-    "context": {}
+    ]
+  },
+  "context": {}
 }
 
 class ReqAuthorizer(object):
@@ -99,7 +101,7 @@ class ReqAuthorizer(object):
             for tst in prof['api_permits'][verb]:
                 # and test for first match
                 if tst == endpt:
-                    AWSPolicy['Statement'][0]['Effect'] = 'Allow'
+                    AWSPolicy['policyDocument']['Statement'][0]['Effect'] = 'Allow'
                     break
             # lose the key before sending along    
             del(prof['api_key'])
@@ -121,7 +123,7 @@ class ReqAuthorizer(object):
 def handler(event, context):
     "Evaluate access request from outside"
     # prep policy statement
-    AWSPolicy['Statement'][0]["Resource"] = event['methodArn']
+    AWSPolicy['policyDocument']['Statement'][0]["Resource"] = event['methodArn']
     
     # validate and auth check
     return  ReqAuthorizer(event).run()
