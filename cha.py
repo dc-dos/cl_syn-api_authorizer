@@ -8,7 +8,7 @@ from Crypto.Random import get_random_bytes
 plaintext = b'Attack at dawn'
 pt2 = b'o come all ye faithful'
 key = get_random_bytes(32)
-vp3
+
 # encrypt message
 
 # get nonce from cipher and create B64 strings

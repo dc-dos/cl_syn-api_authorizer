@@ -3,3 +3,6 @@ P3
 *.zip
 .vscode
 Crypto
+certifi*
+chardet*
+idna*

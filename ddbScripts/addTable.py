@@ -1,6 +1,6 @@
 import boto3
 
-TABLE_NAME = 'cl_ssi-authorizer_api'
+TABLE_NAME = 'cl_ssi-authorizer_profiles'
 
 # fyi
 print(f"Using Account; {boto3.client('sts').get_caller_identity().get('Account')}")
@@ -15,13 +15,13 @@ try:
         TableName= TABLE_NAME,
         KeySchema=[
             {
-                'AttributeName': 'api_id',
+                'AttributeName': 'api_key',
                 'KeyType': 'HASH'
             }
         ],
         AttributeDefinitions=[
             {
-                'AttributeName': 'api_id',
+                'AttributeName': 'api_key',
                 'AttributeType': 'S'
             }
         ],
