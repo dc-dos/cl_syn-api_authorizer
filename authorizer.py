@@ -4,6 +4,9 @@ authorizer.py
 dconnell
 3/10/20
 
+[*** On hiatus: Using authorizer2.py for basic auth strategy. Keeping this for 
+ ChaCha20Poly1305 python reference ***]
+
 Use API_KEY sent with request (Authorization Header) to lookup and validate the
 sender. If validated, the methodArn / API_KEY is authorized (or not).
 
@@ -77,9 +80,9 @@ class ReqAuthorizer(object):
                 "api_id": self.api_key,
                 }
         )
-
+        print('response')
         profile = response['Item']
-        print(f'Retrieved Profile: {json.dumps(self.profile)}')
+        print(f'Retrieved Profile: {json.dumps(profile)}')
         return profile
 
     def doAuth(self):
