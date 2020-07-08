@@ -54,11 +54,12 @@ class ReqAuthorizer(object):
             if parts[0] != 'Bearer':
                 print("Rejected: Invalid Authorization Header")
                 return False
-            self.app_key = b64decode(parts[-1]).decode('utf8').strip()
+            key = parts[-1]
+            self.app_key = key if type(key) is str else key.decode('utf8')
 
         except Exception as err:
             # whatever, it aint good
-            print(f"Validation Excetion: {err}")
+            print(f"Validation Exception: {err}")
             return False
         
         # ok, token was valid

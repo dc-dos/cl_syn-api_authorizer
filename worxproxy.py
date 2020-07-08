@@ -4,85 +4,165 @@
 - Passthrough response
 """
 import json
-import urllib
-from urllib.parse import parse_qs
+import urllib.request
+from urllib.parse import parse_qs, urlencode
 
 # log high verosity flag
 DEBUG = False
-
-BASE_URL = "http://test3.rlsworx.com/Mobility/go.mbl"
 
 GOOD_RESULTS = ['100','200', 100, 200]
 
 VERB_TABLE = {
     "POST": "Create",
-    "GET": "Create"
+    "GET": "Fetch",
+    "PUT": "",
+    "DELETE": "Delete"
 }
 
 class WorxProxy(object):
     """
     Worker class for REST => Worx Proxy
     """
-    def __init__(self, event, context):
+    def __init__(self, event):
         self.event = event
-        self.context = context
+        self.context = event['requestContext']['authorizer']
 
     def run(self):
         """
         parse input, make http call and return results
         """
         # start with base Worx url
-        endpt = f'{BASE_URL}'
+        endpt = self.context["gwxurl"]
+        access_token = self.context["access_token"]
+        gwxid = self.context["gwxid"]
+        hdrs = {'Authorization': self.event['headers']['Authorization'], "Accept": "*/*"}
 
         # infer the action from method
         # and path nodes. (REST => Worx)
         method = self.event['httpMethod']
-        verb = VERB_TABLE[method]
-        path = self.event['path'].split("/")[1:]
+        verb = path = None
+        if method == "PUT":
+            verb = path.pop().capitalize()
+        else: 
+            verb = VERB_TABLE[method]
+            path = self.event['path'].split("/")[1:]
+        
+        # build out Worx Action
         action = f'{".".join(path)}.{verb}'
+        
+        # start the process of getting the body set up
         body = {}
-        # load up params in body
-        if self.event['body']:
-            params = parse_qs(self.event['body'])
-            body = {k:v[0] for k,v in params.items()} 
-        if self.event['queryStringParameters']:
-            body.update(self.event['queryStringParameters'])
-        body['action'] = action
+        data = None
 
-        if method == 'GET':
-            endpt = f'{endpt}?{urllib.encode(body)}'
-            body = None
-        if DEBUG:
-            print(f"Calling {method} on {endpt} with payload:")
-            print(body)
+        if method == 'PATCH':
+            # preserve patch body and query string
+            params = urlencode(self.event['queryStringParameters'])
+            endpt = f'{endpt}?action={action}&{params}'
+            hdrs['Content-Type'] = 'application/json'
+            data = json.dumps(self.event['body']).encode('utf8') 
+        else:
+            # load up params in body
+            # check for formdata, json and jsonstring 
+            if self.event['body']:
+                params = {}
+                try:
+                    params = parse_qs(self.event['body'])
+                except:
+                    pass
 
-        # fire http ball and
-        req = urllib.request.Request(url=endpt, method=method, data=urllib.parse.urlencode(body).encode("utf8"))
-        res = None
-        try:
-            with urllib.request.urlopen(req) as f:
-                res = json.loads(f.read())
-                res['result_code'] = f.status
-                res['result_message'] = f.reason if GOOD_RESULTS.index(f.status) < 0 else 'Success'
-                    
-                if DEBUG:
-                    print("Results:")
-                    print(res)
-        except Exception as err:
-            print(f"Exception: {err}")
-            res = { "result_code": 500, "result_message": f"Exception: {err}"}
+                if params:
+                    body = {k:v[0] for k,v in params.items()} 
+                else:
+                    body = self.event['body']
+                    if type(body) is str:
+                        body = json.loads(body)
+
+                    # if json.api, need to flatten
+                    if 'type' in body and 'data' in body:
+                        data = body['data']
+                        del(body['data'])
+                        body.update(data)
+                            
+
+                # add query string to body data 
+                # (ok for for Worx)
+                if self.event['queryStringParameters']:
+                    body.update(self.event['queryStringParameters'])
+            
+            # add in extras from profile etc.
+            body['gwxid'] = gwxid
+            body['action'] = action
+
+            # GET and DELETE use queryString, others use form
+            if method in ('GET','DELETE'):
+                endpt = f'{endpt}?action={action}&{urlencode(body)}'
+                data = None
+            else:
+                # add form content header to POST, PUT
+                # and format data as urlencoded form
+                data = urlencode(body).encode("utf8")
+                hdrs['Content-Type'] = 'application/x-www-form-urlencoded'
+        # now that we have all input data collected, 
+        # validate access token against profile token
+        if access_token != body['access_token']:
+            print("Error: Invalid Access Token!")
+            res = { "result_code": 500, "result_message": f"Exception: {err}", "result_body": ''}
+        else:
+            # run the proxy to worx
+            if DEBUG:
+                print(f"Calling {method} on {endpt} with payload:")
+                print(data)
+                print("Headers:")
+                print(hdrs)
+
+            # fire http ball and
+            req = urllib.request.Request(endpt, data, headers=hdrs, method=method)
+            res = None
+            res = {}
+            try:
+                with urllib.request.urlopen(req) as conn:
+                    the_page = conn.read()
+                    res['result_body'] = json.loads(the_page.decode("utf8"))
+                    res['result_code'] = conn.status
+                    res['result_message'] = conn.reason if GOOD_RESULTS.index(conn.status) < 0 else 'Success'
+
+                    if DEBUG:
+                        print("Results:")
+                        print(res)
+
+            except Exception as err:
+                print(f"Exception: {err}")
+                res = { "result_code": 500, "result_message": f"Exception: {err}", "result_body": ''}
+
+        # done
         return  {
                     "isBase64Encoded": False,
                     "statusCode": res['result_code'],
-                    "body": json.dumps(res),
+                    "body": self.apiResponse(body['type'], res),
                     "headers": {
                         "Content-Type": "application/json"
                     }
                 }
 
+    def apiResponse(self, typ, res):
+        """
+        Format simple JSON.API style response
+        """
+        rsp = {
+            "type": typ
+        }
+        rb = res['result_body']
+        if res['result_code'] == rb['result_code']:
+            rsp['result_body'] = rb
+            rsp['success'] = True
+        else:
+            rsp['success'] = False;
+            rsp['error'] = res['result_message']   
+        return json.dumps(rsp)
+
 # handler
 def handler(event, context):
-    return WorxProxy(event, context).run()
+    return WorxProxy(event).run()
 
 if __name__ == '__main__':
     with open("req.json") as f:
