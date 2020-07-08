@@ -51,7 +51,7 @@ class ReqAuthorizer(object):
         try:
             # validate Bearer token 
             parts = self.token.split(' ')
-            if parts[0] != 'Bearer':
+            if parts[0] != 'Basic':
                 print("Rejected: Invalid Authorization Header")
                 return False
             key = parts[-1]
@@ -118,7 +118,12 @@ class ReqAuthorizer(object):
         Authenticate and Authorize
         """
         if self.validate():
-            AWSPolicy["context"]["profile"] = self.doAuth()
+            prof = self.doAuth()
+            AWSPolicy["context"]["gwxid"] = prof["gwxid"]
+            AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
+            AWSPolicy["context"]["access_token"] = prof["access_token"] 
+            
+        print(AWSPolicy)
         return  AWSPolicy
 
 def handler(event, context):
@@ -128,8 +133,3 @@ def handler(event, context):
     
     # validate and auth check
     return  ReqAuthorizer(event).run()
-
-if __name__ == '__main__':
-    with open("req.json") as f:
-        req = json.load(f)
-    print(handler(req, {}))
