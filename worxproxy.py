@@ -10,20 +10,26 @@ from urllib.parse import parse_qs, urlencode
 # log high verosity flag
 DEBUG = False
 
+# HTTP GOOD
 GOOD_RESULTS = ['100','200', 100, 200]
 
+# API To Action 
 VERB_TABLE = {
     "POST": "Create",
     "GET": "Fetch",
-    "PUT": "",
+    "POST": "",
     "DELETE": "Delete"
 }
+
 
 class WorxProxy(object):
     """
     Worker class for REST => Worx Proxy
     """
     def __init__(self, event):
+        """
+        save incoming data and pull the authoriser addins out
+        """
         self.event = event
         self.context = event['requestContext']['authorizer']
 
@@ -121,6 +127,7 @@ class WorxProxy(object):
             res = {}
             try:
                 with urllib.request.urlopen(req) as conn:
+                    # process the results 
                     the_page = conn.read()
                     res['result_body'] = json.loads(the_page.decode("utf8"))
                     res['result_code'] = conn.status
@@ -159,6 +166,7 @@ class WorxProxy(object):
             rsp['success'] = False;
             rsp['error'] = res['result_message']   
         return json.dumps(rsp)
+
 
 # handler
 def handler(event, context):
