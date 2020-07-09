@@ -8,7 +8,7 @@ import urllib.request
 from urllib.parse import parse_qs, urlencode
 
 # log high verosity flag
-DEBUG = False
+DEBUG = True
 
 # HTTP GOOD
 GOOD_RESULTS = ['100','200', 100, 200]
@@ -73,7 +73,8 @@ class WorxProxy(object):
                 params = {}
                 try:
                     params = parse_qs(self.event['body'])
-                except:
+                except Exception as err:
+                    print(err)
                     pass
 
                 if params:
@@ -90,18 +91,20 @@ class WorxProxy(object):
                         body.update(data)
                             
 
-                # add query string to body data 
-                # (ok for for Worx)
-                if self.event['queryStringParameters']:
-                    body.update(self.event['queryStringParameters'])
+            # add query string to body data 
+            # (ok for for Worx)
+            print(self.event['queryStringParameters'])
+            if self.event['queryStringParameters']:
+                body.update(self.event['queryStringParameters'])
             
             # add in extras from profile etc.
             body['gwxid'] = gwxid
             body['action'] = action
+            body['access_token'] = access_token
 
             # GET and DELETE use queryString, others use form
             if method in ('GET','DELETE'):
-                endpt = f'{endpt}?action={action}&{urlencode(body)}'
+                endpt = f'{endpt}?{urlencode(body)}'
                 data = None
             else:
                 # add form content header to POST, PUT
@@ -109,37 +112,32 @@ class WorxProxy(object):
                 data = urlencode(body).encode("utf8")
                 hdrs['Content-Type'] = 'application/x-www-form-urlencoded'
         # now that we have all input data collected, 
-        # validate access token against profile token
-        if access_token != body['access_token']:
-            print("Error: Invalid Access Token!")
+        # run the proxy to worx
+        if DEBUG:
+            print(f"Calling {method} on {endpt} with payload:")
+            print(data)
+            print("Headers:")
+            print(hdrs)
+
+        # fire http ball and
+        req = urllib.request.Request(endpt, data, headers=hdrs, method=method)
+        res = None
+        res = {}
+        try:
+            with urllib.request.urlopen(req) as conn:
+                # process the results 
+                the_page = conn.read()
+                res['result_body'] = json.loads(the_page.decode("utf8"))
+                res['result_code'] = conn.status
+                res['result_message'] = conn.reason if GOOD_RESULTS.index(conn.status) < 0 else 'Success'
+
+                if DEBUG:
+                    print("Results:")
+                    print(res)
+
+        except Exception as err:
+            print(f"Exception: {err}")
             res = { "result_code": 500, "result_message": f"Exception: {err}", "result_body": ''}
-        else:
-            # run the proxy to worx
-            if DEBUG:
-                print(f"Calling {method} on {endpt} with payload:")
-                print(data)
-                print("Headers:")
-                print(hdrs)
-
-            # fire http ball and
-            req = urllib.request.Request(endpt, data, headers=hdrs, method=method)
-            res = None
-            res = {}
-            try:
-                with urllib.request.urlopen(req) as conn:
-                    # process the results 
-                    the_page = conn.read()
-                    res['result_body'] = json.loads(the_page.decode("utf8"))
-                    res['result_code'] = conn.status
-                    res['result_message'] = conn.reason if GOOD_RESULTS.index(conn.status) < 0 else 'Success'
-
-                    if DEBUG:
-                        print("Results:")
-                        print(res)
-
-            except Exception as err:
-                print(f"Exception: {err}")
-                res = { "result_code": 500, "result_message": f"Exception: {err}", "result_body": ''}
 
         # done
         return  {
@@ -160,11 +158,12 @@ class WorxProxy(object):
         }
         rb = res['result_body']
         if res['result_code'] == rb['result_code']:
-            rsp['result_body'] = rb
+            rsp['data'] = rb
             rsp['success'] = True
         else:
             rsp['success'] = False;
-            rsp['error'] = res['result_message']   
+            rsp['errors'] = [res['result_message']]   
+            
         return json.dumps(rsp)
 
 

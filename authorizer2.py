@@ -43,11 +43,12 @@ class ReqAuthorizer(object):
     """
     def __init__(self, event):
         self.token = event['headers']['Authorization']
+        self.access_token = event['headers']['Access-Token']
         self.resource = event['methodArn']
         self.app_key = None
         
     def validate(self):
-        "Attempt to decrypt the token"
+        "Use Auth token for Authentication"
         try:
             # validate Bearer token 
             parts = self.token.split(' ')
@@ -55,8 +56,7 @@ class ReqAuthorizer(object):
                 print("Rejected: Invalid Authorization Header")
                 return False
             key = parts[-1]
-            self.app_key = key if type(key) is str else key.decode('utf8')
-
+            self.app_key = key if type(key) is str else key.decode('utf8')    
         except Exception as err:
             # whatever, it aint good
             print(f"Validation Exception: {err}")
@@ -68,7 +68,7 @@ class ReqAuthorizer(object):
     def getProfile(self):
         """
         Attempt to retrieve client profile using
-        token data.
+        token data
         """
         # get service connection
         ddb = boto3.resource('dynamodb')
@@ -87,7 +87,8 @@ class ReqAuthorizer(object):
         """
         Make call into DDB using the key/secret
         to access the customer profile and set
-        up user / store # data
+        up user / store # data after authorizing
+        endpoint
         """
         # approve access
         prof = None
@@ -99,6 +100,10 @@ class ReqAuthorizer(object):
 
             # get permited endpoints
             prof = self.getProfile()
+            
+            # validate access token against profile token
+            if self.access_token != prof['access_token']:
+                raise Exception("Invalid Access Token")
             for tst in prof['api_permits'][verb]:
                 # and test for first match
                 if tst == endpt:
@@ -107,8 +112,8 @@ class ReqAuthorizer(object):
             # lose the key before sending along    
             del(prof['api_key'])
         except Exception as err:
-            prof = {}
-            print(f'Auth Exception: {err}')
+            prof = False
+            print(f'Authentication Exception: {err}')
 
         # all done
         return prof
@@ -119,9 +124,10 @@ class ReqAuthorizer(object):
         """
         if self.validate():
             prof = self.doAuth()
-            AWSPolicy["context"]["gwxid"] = prof["gwxid"]
-            AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
-            AWSPolicy["context"]["access_token"] = prof["access_token"] 
+            if prof:
+                AWSPolicy["context"]["gwxid"] = prof["gwxid"]
+                AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
+                AWSPolicy["context"]["access_token"] = prof["access_token"] 
             
         print(AWSPolicy)
         return  AWSPolicy
