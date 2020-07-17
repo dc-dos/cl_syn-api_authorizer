@@ -42,10 +42,15 @@ class ReqAuthorizer(object):
     """
     """
     def __init__(self, event):
-        self.token = event['headers']['Authorization']
-        self.access_token = event['headers']['Access-Token']
-        self.resource = event['methodArn']
-        self.app_key = None
+        try :
+            self.token = event['headers']['Authorization']
+            self.access_token = event['headers']['Access-Token']
+            self.resource = event['methodArn']
+            self.app_key = None
+            self.param_err = False
+        except Exception as err:
+            print(f"Exception: {err}")
+            self.param_err = True
         
     def validate(self):
         "Use Auth token for Authentication"
@@ -123,13 +128,21 @@ class ReqAuthorizer(object):
         """
         Authenticate and Authorize
         """
-        if self.validate():
-            prof = self.doAuth()
-            if prof:
-                AWSPolicy["context"]["gwxid"] = prof["gwxid"]
-                AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
-                AWSPolicy["context"]["access_token"] = prof["access_token"] 
-            
+        if self.param_err:
+            # explicit deny 
+            print("Invalid input parameters")
+            AWSPolicy['policyDocument']['Statement'][0]['Effect'] = 'Deny'
+        else:
+            try: 
+                if self.validate():
+                    prof = self.doAuth()
+                    if prof:
+                        AWSPolicy["context"]["gwxid"] = prof["gwxid"]
+                        AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
+                        AWSPolicy["context"]["access_token"] = prof["access_token"] 
+            except:
+                pass
+    
         print(AWSPolicy)
         return  AWSPolicy
 
