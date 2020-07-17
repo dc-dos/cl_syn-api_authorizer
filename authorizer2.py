@@ -102,9 +102,10 @@ class ReqAuthorizer(object):
             prof = self.getProfile()
             
             # validate access token against profile token
-            if self.access_token != prof['access_token']:
+            if self.access_token not in prof['access_tokens']:
                 raise Exception("Invalid Access Token")
             for tst in prof['api_permits'][verb]:
+                prof['access_token'] = self.access_token
                 # and test for first match
                 if tst == endpt:
                     AWSPolicy['policyDocument']['Statement'][0]['Effect'] = 'Allow'

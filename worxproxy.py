@@ -143,7 +143,7 @@ class WorxProxy(object):
         return  {
                     "isBase64Encoded": False,
                     "statusCode": res['result_code'],
-                    "body": self.apiResponse(body['type'], res),
+                    "body": self.apiResponse("alerts", res),
                     "headers": {
                         "Content-Type": "application/json"
                     }
@@ -170,8 +170,3 @@ class WorxProxy(object):
 # handler
 def handler(event, context):
     return WorxProxy(event).run()
-
-if __name__ == '__main__':
-    with open("req.json") as f:
-        req = json.load(f)
-    print(handler(req, {}))
