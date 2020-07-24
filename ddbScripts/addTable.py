@@ -1,6 +1,8 @@
 import boto3
+import sys
 
-TABLE_NAME = 'cl_ssi-authorizer_profiles'
+TABLE_NAME = sys.argv[1]
+KEY_NAME = sys.argv[2]
 
 # fyi
 print(f"Using Account; {boto3.client('sts').get_caller_identity().get('Account')}")
@@ -15,13 +17,13 @@ try:
         TableName= TABLE_NAME,
         KeySchema=[
             {
-                'AttributeName': 'api_key',
+                'AttributeName': KEY_NAME,
                 'KeyType': 'HASH'
             }
         ],
         AttributeDefinitions=[
             {
-                'AttributeName': 'api_key',
+                'AttributeName': KEY_NAME,
                 'AttributeType': 'S'
             }
         ],
@@ -40,4 +42,4 @@ if not table:
     table = ddb.Table(TABLE_NAME)
 
 # Print out some data about the table.
-print(f"Profiles found: {table.item_count}")
+print(f"Items found: {table.item_count}")

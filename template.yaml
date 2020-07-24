@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  cl_syn-csi_sam
+
+  GlobalWorx 
+  CSI RESTful API
+# Global definitions for resources
+Globals:
+  Function:
+    Timeout: 3
+    Tags:
+      ENV: Test
+      PROJECT: CSI_API
+# AWS Resources
+Resources:
+  # -- API Gateway --
+  CSIRestAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Test
+      Auth:
+        DefaultAuthorizer: LambdaAuthorizer
+        Authorizers:
+          LambdaAuthorizer:
+            FunctionPayloadType: REQUEST
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            Identity:
+              Headers:
+                - Authorization
+                - Access-Token
+              ReauthorizeEvery: 120 # seconds
+      Models:
+        APIResponse:
+          type: object
+          required: [ success, type ]
+          properties : 
+            type : 
+              type : string
+            success : 
+              type : boolean
+            data : 
+              type : object
+              properties :                 
+            error : 
+              type : string
+
+  # -- Lambda --
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: cl_syn-api_authorizer
+      CodeUri: lambdas/
+      Handler: authorizer.handler
+      Runtime: python3.7
+  WorxProxyFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: cl_syn-http_proxy
+      CodeUri: lambdas/
+      Handler: worxproxy.handler
+      Runtime: python3.7
+      Events:
+        GetReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CSIRestAPI
+            Path: /api/csi/*
+            Method: put
+  CSIReportFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: cl_syn-csi_report
+      CodeUri: lambdas/
+      Handler: csireport.handler
+      Runtime: python3.7
+      Events:
+        GetReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CSIRestAPI
+            Path: /api/csi
+            Method: get
+  # -- Layers --
+  PsycoPGLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes: 
+      - python3.7
+      ContentUri: arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py37:3
+      Description: Python DBI Driver for PostgreSQL
+      LayerName: cl_syn-layer_psycopg2
+  AppDBLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes: 
+      - python3.7
+      ContentUri: .
+      Description: Python modules for GWX DB work
+      LayerName: cl_syn-layer_gwxdb
+  # -- DynamoDB --
+  ConfigsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey: 
+        Name: app_id
+        Type: String
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: cl_syn-csi_configs
+    Tags:
+      ENV: Test
+      PROJECT: CSI_API
+  ProfilesTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey: 
+        Name: api_key
+        Type: String
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: cl_syn-auth_profiles
+    Tags:
+      ENV: Test
+      PROJECT: CSI_API

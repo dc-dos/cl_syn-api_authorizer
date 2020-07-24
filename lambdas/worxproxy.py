@@ -21,7 +21,6 @@ VERB_TABLE = {
     "DELETE": "Delete"
 }
 
-
 class WorxProxy(object):
     """
     Worker class for REST => Worx Proxy
@@ -42,6 +41,7 @@ class WorxProxy(object):
         access_token = self.context["access_token"]
         gwxid = self.context["gwxid"]
         hdrs = {'Authorization': self.event['headers']['Authorization'], "Accept": "*/*"}
+        content_type = self.event['headers']['Content-Type']
 
         # infer the action from method
         # and path nodes. (REST => Worx)
@@ -68,49 +68,53 @@ class WorxProxy(object):
             data = json.dumps(self.event['body']).encode('utf8') 
         else:
             # load up params in body
-            # check for formdata, json and jsonstring 
-            if self.event['body']:
-                params = {}
-                try:
-                    params = parse_qs(self.event['body'])
-                except Exception as err:
-                    print(err)
-                    pass
-
-                if params:
-                    body = {k:v[0] for k,v in params.items()} 
-                else:
-                    body = self.event['body']
-                    if type(body) is str:
-                        body = json.loads(body)
-
-                    # if json.api, need to flatten
-                    if 'type' in body and 'data' in body:
-                        data = body['data']
-                        del(body['data'])
-                        body.update(data)
-                            
-
-            # add query string to body data 
-            # (ok for for Worx)
-            print(self.event['queryStringParameters'])
-            if self.event['queryStringParameters']:
-                body.update(self.event['queryStringParameters'])
-            
-            # add in extras from profile etc.
-            body['gwxid'] = gwxid
-            body['action'] = action
-            body['access_token'] = access_token
-
-            # GET and DELETE use queryString, others use form
-            if method in ('GET','DELETE'):
-                endpt = f'{endpt}?{urlencode(body)}'
-                data = None
+            # check for formdata, json and jsonstring
+            if content_type.contains('multipart'):
+                data = self.event['body']
+                hdrs['Content-Type'] = content_type
             else:
-                # add form content header to POST, PUT
-                # and format data as urlencoded form
-                data = urlencode(body).encode("utf8")
-                hdrs['Content-Type'] = 'application/x-www-form-urlencoded'
+                if self.event['body']:
+                    params = {}
+                    try:
+                        params = parse_qs(self.event['body'])
+                    except Exception as err:
+                        print(err)
+                        pass
+
+                    if params:
+                        body = {k:v[0] for k,v in params.items()} 
+                    else:
+                        body = self.event['body']
+                        if type(body) is str:
+                            body = json.loads(body)
+
+                        # if json.api, need to flatten
+                        if 'type' in body and 'data' in body:
+                            data = body['data']
+                            del(body['data'])
+                            body.update(data)
+                                
+
+                # add query string to body data 
+                # (ok for for Worx)
+                print(self.event['queryStringParameters'])
+                if self.event['queryStringParameters']:
+                    body.update(self.event['queryStringParameters'])
+                
+                # add in extras from profile etc.
+                body['gwxid'] = gwxid
+                body['action'] = action
+                body['access_token'] = access_token
+
+                # GET and DELETE use queryString, others use form
+                if method in ('GET','DELETE'):
+                    endpt = f'{endpt}?{urlencode(body)}'
+                    data = None
+                else:
+                    # add form content header to POST, PUT
+                    # and format data as urlencoded form
+                    data = urlencode(body).encode("utf8")
+                    hdrs['Content-Type'] = 'application/x-www-form-urlencoded'
         # now that we have all input data collected, 
         # run the proxy to worx
         if DEBUG:
