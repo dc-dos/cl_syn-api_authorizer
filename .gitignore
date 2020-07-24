@@ -7,3 +7,4 @@ certifi*
 chardet*
 idna*
 .DS_Store
+.aws-sam/build
