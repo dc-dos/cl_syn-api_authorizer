@@ -52,14 +52,14 @@ Resources:
       FunctionName: cl_syn-api_authorizer
       CodeUri: lambdas/
       Handler: authorizer.handler
-      Runtime: python3.7
+      Runtime: python3.6
   WorxProxyFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       FunctionName: cl_syn-http_proxy
       CodeUri: lambdas/
       Handler: worxproxy.handler
-      Runtime: python3.7
+      Runtime: python3.6
       Events:
         GetReport:
           Type: Api
@@ -73,7 +73,7 @@ Resources:
       FunctionName: cl_syn-csi_report
       CodeUri: lambdas/
       Handler: csireport.handler
-      Runtime: python3.7
+      Runtime: python3.6
       Events:
         GetReport:
           Type: Api
@@ -86,7 +86,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes: 
-      - python3.7
+      - python3.6
       ContentUri: arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py37:3
       Description: Python DBI Driver for PostgreSQL
       LayerName: cl_syn-layer_psycopg2
@@ -94,7 +94,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes: 
-      - python3.7
+      - python3.6
       ContentUri: .
       Description: Python modules for GWX DB work
       LayerName: cl_syn-layer_gwxdb
