@@ -18,7 +18,20 @@ Resources:
   CSIRestAPI:
     Type: AWS::Serverless::Api
     Properties:
+      Domain:
+        DomainName: testapi.goglobalworx.com
+        CertificateArn: arn:aws:acm:us-east-1:080747705781:certificate/8bee1793-93f6-4839-a49d-9cc2b0604fcc
+        EndpointConfiguration: EDGE
+        Route53:
+          HostedZoneId: Z1UJRXOUMOOFQ8
+          EvaluateTargetHealth: true
       StageName: Test
+      Cors:
+        AllowMethods: "'POST, PUT, GET'"
+        AllowHeaders: "'X-Forwarded-For, Authorization, Content-Type, Access-Token'"
+        AllowOrigin: "*"
+        MaxAge: "'600'"
+        AllowCredentials: True
       Auth:
         DefaultAuthorizer: LambdaAuthorizer
         Authorizers:
@@ -44,7 +57,6 @@ Resources:
               properties :                 
             error : 
               type : string
-
   # -- Lambda --
   AuthorizerFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -74,6 +86,9 @@ Resources:
       CodeUri: lambdas/
       Handler: csireport.handler
       Runtime: python3.8
+      Layers:
+        - arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py38:1
+        - Ref: AppDBLayer
       Events:
         GetReport:
           Type: Api
@@ -82,20 +97,20 @@ Resources:
             Path: /api/csi
             Method: get
   # -- Layers --
-  PsycoPGLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      CompatibleRuntimes: 
-      - python3.8
-      ContentUri: arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py37:3
-      Description: Python DBI Driver for PostgreSQL
-      LayerName: cl_syn-layer_psycopg2
+  # PsycoPGLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     CompatibleRuntimes: 
+  #     - python3.8
+  #     ContentUri: arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py37:3
+  #     Description: Python DBI Driver for PostgreSQL
+  #     LayerName: cl_syn-layer_psycopg2
   AppDBLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes: 
       - python3.8
-      ContentUri: .
+      ContentUri: layers/
       Description: Python modules for GWX DB work
       LayerName: cl_syn-layer_gwxdb
   # -- DynamoDB --
