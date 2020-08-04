@@ -12,12 +12,12 @@ ddb = boto3.resource('dynamodb')
 table = ddb.Table("cl_syn-csi_configs")
 
 item={
-    "app_id": "csigwx1",
-    "name": "CSI Warehouse",
+    "app_id": "DSD1",
+    "name": "DSD1 Database",
     "db": {
-        "host": "",
+        "host": "10.0.3.99",
         "port": 5432,
-        "database": "gwx1",
+        "database": "dsd1",
         "user": "david",
         "password": ""
     },
@@ -38,4 +38,4 @@ print(response)
 
 # and report
 item = response['Item']
-print(f'Saved item: {json.dumps(item)}')
+print(f'Saved item: {item}')

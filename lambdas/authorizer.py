@@ -21,7 +21,7 @@ import json
 from base64 import b64encode, b64decode
 import boto3
 
-DDB_TABLE = os.environ['DDB_TABLE']
+DDB_TABLE = os.environ['PROFILES_TABLE']
 
 AWSPolicy = {
   "principalId": "*", 
@@ -138,6 +138,7 @@ class ReqAuthorizer(object):
                     prof = self.doAuth()
                     if prof:
                         AWSPolicy["context"]["gwxid"] = prof["gwxid"]
+                        AWSPolicy["context"]["gwxwhs"] = prof["gwxwhs"]
                         AWSPolicy["context"]["gwxurl"] = prof["worx_url"]
                         AWSPolicy["context"]["access_token"] = prof["access_token"] 
             except:
