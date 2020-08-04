@@ -13,7 +13,7 @@ import sicommon as SIC
 SQL = {
     "getInstance": 
         """
-        select t.name, i.rmtkey as mfg, i.rmtkey, i.appid, ai.description,
+        select t.name, i.localkey, i.rmtkey as mfg, i.appid, ai.description,
               ap.name || ds.pgname as dbid
           from dwxMasterIndex i
           join dwxTierInstance t on i.localkey = t.dwxid
@@ -21,10 +21,10 @@ SQL = {
           join dwxDatastore ds on ai.storeid = ds.rkey
           join dwxAppServer ap on ds.serverid = ap.rkey
          where i.localkey=%s and i.objid=2 and i.appid=%s
-         """, 
+         """,
     "getInstances": 
         """
-        select t.name, i.rmtkey as mfg, i.appid, ai.description,
+        select t.name, i.localkey, i.rmtkey as mfg, i.appid, ai.description,
               ap.name || ds.pgname as dbid
           from dwxMasterIndex i
           join dwxTierInstance t on i.localkey = t.dwxid
@@ -65,18 +65,33 @@ class Rollback(threading.Thread):
         threading.Thread.__init__(self)
         self.conf = conf
         self.queue = que
-        self.test = False if "test" not in conf else conf['test']
+        self.test = "test" in conf
+
+    def commit(self, conn):
+        """
+        Commit or rollback according to 
+        test flag setting
+        """
+        if self.test:
+            logger.warn("Testing, skipping commit")
+            conn.rollback()
+        else:
+            conn.commit()
 
     def run(self):
         """
         Connect to remote db and execute rollback
         """
+        logger.info(f"testing = {self.test}")
+            
         # convenience
         rid = self.conf['runid']
         err = err_msg = rslt_msg = None
 
         # Get db connector for dbid
-        conn = dbc.DBC(self.conf['rec'][DBID]).connect()
+        logger.info(f"conf: {self.conf}") 
+        
+        conn = dbc.DBC(self.conf['rec'][SIC.DBID]).connect()
         with conn.cursor() as crsr:
             crsr.execute(SQL['check'], (rid,))
             logger.info(f"query: {crsr.query}")
@@ -111,8 +126,7 @@ class Rollback(threading.Thread):
                 })
 
         # check test flag before committing
-        if not self.test:
-            conn.commit()
+        self.commit(conn)
 
         # good return
         self.queue.put({ 
@@ -180,8 +194,13 @@ class ClearSI(object):
                         "success": True
                     }
 
-                if not self.test:
-                    conn.commit()
+            # check test flag before committing
+            if self.test:
+                logger.warn("Testing, skipping commit")
+                conn.rollback()
+            else:
+                conn.commit()
+
         except Exception as err:
             logger.error(f"Reset Error: {err}")
 
@@ -246,10 +265,14 @@ class ClearSI(object):
                     
                     # enhance the query with local goodies
                     conf = {
-                        "runid": self.runid,
+                        "runid": self.params['runid'],
                         "rec": inst
                     }
-
+                    
+                    # check for testing flag
+                    if self.test:
+                        conf['test'] = 1
+                    
                     # build worker thread and start it up
                     wkr = Rollback(conf, rq)
                     wkr.start()

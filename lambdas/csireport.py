@@ -104,6 +104,11 @@ class ReportSection(threading.Thread):
                     params.append(self.conf['runid'])
             if k == 'test':
                 self.test = True
+        
+        # always filter by key account
+        query = f"{query} and keyacct = %s"
+        params.append(self.conf['rec'][SIC.RKEY])
+
         return query, params
 
     def run(self):
@@ -138,11 +143,13 @@ class ReportSection(threading.Thread):
             for rec in crsr:
                 # format and queue item for return
                 self.queue.put(SIC.format_item(self.conf, rec, rid))
-            
-            # and seal the deal if not test
-            if not self.test:
-                conn.commit()
-            
+        
+        # and seal the deal if not test
+        if self.test:
+            conn.rollback()
+        else:
+            conn.commit()
+        
         return 
 
 
@@ -205,6 +212,7 @@ class CSIReport(object):
         Build parameters into filter object
         """
         filter = {
+            "keyacct": self.gwxid,
             "from": None,
             "to": None,
             "retailer": None,
@@ -227,7 +235,7 @@ class CSIReport(object):
             elif k == 'vendor_no':
                 filter['vendor'] = v
             elif k == 'id':
-                filter['woid'] = val.split("-")[1]
+                filter['woid'] = v.split("-")[1]
             elif k == 'ready':
                 filter['ready'] = v not in FALSIES
             elif k == 'test':
@@ -325,3 +333,4 @@ def handler(event,context):
         "headers": { "Content-Type": "application/json"},
         "body": json.dumps(rpt)
     }
+    
