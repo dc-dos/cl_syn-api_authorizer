@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  cl_syn-csi_sam
+  csi-api_sam
 
   GlobalWorx 
   CSI RESTful API
@@ -12,19 +12,25 @@ Globals:
     Tags:
       ENV: Test
       PROJECT: CSI_API
+Parameters:
+  ConfigTableParam:
+    Type: String
+    Default: csi_db_configs
+  ProfilesTableParam:
+    Type: String
+    Default: csi_auth_profiles
 # AWS Resources
 Resources:
   # -- API Gateway --
-  CSIRestAPI:
+  CsiRestApi:
     Type: AWS::Serverless::Api
     Properties:
       Domain:
-        DomainName: testapi.goglobalworx.com
+        DomainName: apitest.goglobalworx.com
         CertificateArn: arn:aws:acm:us-east-1:080747705781:certificate/8bee1793-93f6-4839-a49d-9cc2b0604fcc
-        EndpointConfiguration: EDGE
+        EndpointConfiguration: REGIONAL
         Route53:
           HostedZoneId: Z1UJRXOUMOOFQ8
-          EvaluateTargetHealth: true
       StageName: Test
       Cors:
         AllowMethods: "'POST, PUT, GET'"
@@ -54,21 +60,42 @@ Resources:
               type : boolean
             data : 
               type : object
-              properties :                 
+              properties : {}                
             error : 
               type : string
   # -- Lambda --
   AuthorizerFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
-      FunctionName: cl_syn-api_authorizer
+      FunctionName: gwx-api_authorizer
       CodeUri: lambdas/
       Handler: authorizer.handler
       Runtime: python3.8
+      Policies:
+        - AWSLambdaExecute
+        - Version: '2012-10-17' 
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:BatchGetItem,
+                - dynamodb:Describe*,
+                - dynamodb:List*,
+                - dynamodb:GetItem,
+                - dynamodb:Query,
+                - dynamodb:Scan,
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Ref ProfilesTable
+      Environment:
+        Variables:
+          PROFILES_TABLE: !Ref ProfilesTableParam  
   WorxProxyFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
-      FunctionName: cl_syn-http_proxy
+      FunctionName: gwx-http_proxy
       CodeUri: lambdas/
       Handler: worxproxy.handler
       Runtime: python3.8
@@ -76,16 +103,43 @@ Resources:
         GetReport:
           Type: Api
           Properties:
-            RestApiId: !Ref CSIRestAPI
+            RestApiId: !Ref CsiRestApi
             Path: /api/csi/*
             Method: put
+            RequestParameters:
+              - method.request.header.Authorization
+              - method.request.header.Access-Token
+
   CSIReportFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
-      FunctionName: cl_syn-csi_report
+      FunctionName: gwxc-csi_report
       CodeUri: lambdas/
       Handler: csireport.handler
       Runtime: python3.8
+      Policies:
+        - AWSLambdaExecute
+        - Version: '2012-10-17' 
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:BatchGetItem,
+                - dynamodb:Describe*,
+                - dynamodb:List*,
+                - dynamodb:GetItem,
+                - dynamodb:Query,
+                - dynamodb:Scan,
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Ref ConfigsTable      
+      Environment:
+        Variables:
+          CONFIGS_TABLE: !Ref ConfigTableParam
+
+
       Layers:
         - arn:aws:lambda:us-east-1:898466741470:layer:psycopg2-py38:1
         - Ref: AppDBLayer
@@ -93,9 +147,12 @@ Resources:
         GetReport:
           Type: Api
           Properties:
-            RestApiId: !Ref CSIRestAPI
+            RestApiId: !Ref CsiRestApi
             Path: /api/csi
             Method: get
+            RequestParameters:
+              - method.request.header.Authorization
+              - method.request.header.Access-Token
   # -- Layers --
   # PsycoPGLayer:
   #   Type: AWS::Serverless::LayerVersion
@@ -123,7 +180,7 @@ Resources:
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
-      TableName: cl_syn-csi_configs
+      TableName: !Ref ConfigTableParam
     Tags:
       ENV: Test
       PROJECT: CSI_API
@@ -136,7 +193,11 @@ Resources:
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
-      TableName: cl_syn-auth_profiles
+      TableName: !Ref ProfilesTableParam
     Tags:
       ENV: Test
       PROJECT: CSI_API
+Outputs:
+  TestDataEndpoint:
+    Description: "API Test stage endpoint"
+    Value: !Sub "https://${CsiRestApi}.execute-api.${AWS::Region}.amazonaws.com/Test/"

@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "csi-api-stack"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-2gjlkfz0oe67"
+s3_prefix = "csi-api-stack"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "ConfigTableParam=\"csi_db_configs\" ProfilesTableParam=\"csi_auth_profiles\""
+
