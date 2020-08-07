@@ -26,14 +26,15 @@ SQL = {
     "getInstances": 
         """
         select t.name, i.localkey, i.rmtkey,i.appid, ai.description,
-            ap.name || ds.pgname as dbid
-        from dwxAccessToken a
-        JOIN dwxMasterIndex i on  a.gwxid = i.localkey
-        join dwxTierInstance t on i.localkey = t.dwxid
-        join dwxAppInstance ai on i.appid = ai.rkey
-        join dwxDatastore ds on ai.storeid = ds.rkey
-        join dwxAppServer ap on ds.serverid = ap.rkey
-        where a.access_token = %s and objid = 2
+               dap.name || ds.pgname as dbid, aap.domain
+          from dwxAccessToken a
+          JOIN dwxMasterIndex i on  a.gwxid = i.localkey
+          join dwxTierInstance t on i.localkey = t.dwxid
+          join dwxAppInstance ai on i.appid = ai.rkey
+          join dwxDatastore ds on ai.storeid = ds.rkey
+          join dwxAppServer dap on ds.serverid = dap.rkey
+          join dwxAppServer aap on ai.serverid = aap.rkey
+         where a.access_token = %s and objid = 2
         """,
     "gatherServiceIssues":"Select distinct * from vwCSIWorkOrder",
     "markServiceIssues":
@@ -72,8 +73,10 @@ class ReportSection(threading.Thread):
 
         if filter['woid']: 
             # overrides all others with specific slot request 
-            query = f"{query} where woid = %s"
+            query = f"{query} where woid = %s and keyacct = %s"
             params.append(filter['woid'])
+            params.append(self.conf['rec'][SIC.RKEY])
+            
             return query, params
 
         # else plod on through    
@@ -84,11 +87,11 @@ class ReportSection(threading.Thread):
             
             conj = ' and ' if len(params) else ' where '
             if k == 'from':
-                query = f"{query}{conj}origdate >= %s"
-                params.append(f'{val.month}/{val.day}/{val.year} {val.hour}:{val.minute}:{val.second}')
+                query = f"{query}{conj}(stdate + sttime) >= %s"
+                params.append(val)
             if k == 'to':
-                query = f"{query}{conj}origdate < %s"
-                params.append(f'{val.month}/{val.day}/{val.year} {val.hour}:{val.minute}:{val.second}')
+                query = f"{query}{conj}(stdate + sttime) < %s"
+                params.append(val)
             if k == 'retailer':
                 query = f"{query}{conj}rid = %s"
                 params.append(val)
@@ -106,7 +109,7 @@ class ReportSection(threading.Thread):
                 self.test = True
         
         # always filter by key account
-        query = f"{query} and keyacct = %s"
+        query = f"{query} and keyacct = %s order by woid"
         params.append(self.conf['rec'][SIC.RKEY])
 
         return query, params
@@ -122,6 +125,8 @@ class ReportSection(threading.Thread):
         # Get db connector for dbid
         logger.info(f"Connecting to {self.conf['rec'][SIC.DBID]}")
         conn = dbc.DBC(self.conf['rec'][SIC.DBID]).connect()
+        itm = {"id":"0-<none>-0"}
+
         with conn.cursor() as crsr:
             # register run id if we are collecting
             # new alerts an
@@ -141,9 +146,28 @@ class ReportSection(threading.Thread):
             crsr.execute(qry, tuple(params))
             logger.info(f"Query: {crsr.query}")
             for rec in crsr:
-                # format and queue item for return
-                self.queue.put(SIC.format_item(self.conf, rec, rid))
-        
+                logger.info(f"Check: {rec[SIC.IWOID]} / {itm['id'].split('-')}")
+                if f'{rec[SIC.IWOID]}' != itm['id'].split("-")[1]:
+                    # first time check
+                    if 'created_at' in itm:
+                        # send it along....
+                        self.queue.put(itm)
+    
+                    # format next item for return
+                    itm = SIC.format_item(self.conf, rec, rid)
+                
+                if rec[SIC.IFNAME]:
+                    # webdir/appid/siteid/images/year/month/prefix-name.ext
+                    # add photo to item
+                    dte = rec[SIC.ISTDATE]
+                    uri = f"/{rec[SIC.IWEBDIR]}/{self.conf['rec'][SIC.APPID]}/{rec[SIC.ISITEID]}/images"
+                    uri = f"{uri}/{dte.year}/{dte.month}/{rec[SIC.IPREFIX]}-{rec[SIC.IFNAME]}.{rec[SIC.IEXT]}"
+                    uri = f"https://{self.conf['rec'][SIC.DOMAIN]}/{uri}"
+                    itm["photos"].append(uri)
+
+            # send last 
+            if "runid" in itm:
+                self.queue.put(itm)
         # and seal the deal if not test
         if self.test:
             conn.rollback()
@@ -151,27 +175,6 @@ class ReportSection(threading.Thread):
             conn.commit()
         
         return 
-
-
-class Collector(threading.Thread):
-    """ 
-    thread runner to collect up results
-    of the various instance queries
-    """
-    def __init__(self, que, arr):
-        """
-        Setup to be a good thread
-        """
-        threading.Thread.__init__(self)
-        self.data = arr
-        self.queue = queue
-        
-    def run(self):
-        logger.info("Collecting...")
-    
-        while True:
-            self.data.append(self.queue.get())
-
 
 class CSIReport(object):
     """
@@ -189,10 +192,11 @@ class CSIReport(object):
         self.token = access_token
         self.home = gwxwhs
         self.queue = queue.SimpleQueue()
+        self.pqueue = queue.SimpleQueue()
     
         # good result template
         self.json = { 
-            "type": "Alerts",
+            "type": "alerts",
             "data": {
                 "result_code": 200,
                 "result_message": "Success",
@@ -200,8 +204,12 @@ class CSIReport(object):
             },
             "success": True
         }
-    
+
     def collect(self):
+        """
+        Thread worker to collect slots from 
+        each of the ReportSection threads.
+        """
         logger.info("Collecting...")
     
         while True:
@@ -256,33 +264,30 @@ class CSIReport(object):
         """
         Trigger the report collection
         """
+        # need at least an empty dict
         if not params:
             params = {}
         filter = {}
-        # try:
+
         # build parameters
         logger.info(f"qs: {params}")
         try:
             filter = self.setFilter(params)
         except Exception as err:
+            # Filter / parameter error
             return { 
-                "type": "Alerts",
+                "type": "alerts",
                 "error": {
                     "result_code": 400,
                     "result_message": f"{err}",
                 },
                 "success": False
             }
-        # except Exception as err:
-        #    logger.error(f"Parameter Error: {err}")
-        #    return {
-        #                "type": "Alerts",
-        #                "errors": [f"Parameter Error: {err}"],
-        #                "success": False                
-        #            }            
+ 
         # start up the collection engine
         threading.Thread(target=self.collect, daemon=True).start()
 
+        
         # Get connection to central whse db
         conn = dbc.DBC(self.home).connect() 
         logger.info("Connected...")
@@ -292,12 +297,15 @@ class CSIReport(object):
             workers = []
             crsr.execute(SQL['getInstances'], (self.token,))
             for inst in crsr:
-                logger.info(f"Getting {inst}")
-                
+                # get a runid for this insa
+                runid = f'{uuid.uuid4()}'
+
+                logger.info(f"Getting {inst} RunID: {runid}")
+
                 # enhance the query with local goodies
                 conf = {
                     "filter": filter,
-                    "runid": f'{uuid.uuid4()}',
+                    "runid": runid,
                     "keyacct": self.gwxid,
                     "rec": inst
                 }
@@ -333,4 +341,3 @@ def handler(event,context):
         "headers": { "Content-Type": "application/json"},
         "body": json.dumps(rpt)
     }
-    
