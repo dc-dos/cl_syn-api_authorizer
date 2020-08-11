@@ -36,7 +36,7 @@ SQL = {
           join dwxAppServer aap on ai.serverid = aap.rkey
          where a.access_token = %s and objid = 2
         """,
-    "gatherServiceIssues":"Select distinct * from vwCSIWorkOrder",
+    "gatherServiceIssues":"Select distinct * from vwCSIWorkOrder2",
     "markServiceIssues":
         """
         Update dwmWorkorder 
@@ -146,7 +146,6 @@ class ReportSection(threading.Thread):
             crsr.execute(qry, tuple(params))
             logger.info(f"Query: {crsr.query}")
             for rec in crsr:
-                logger.info(f"Check: {rec[SIC.IWOID]} / {itm['id'].split('-')}")
                 if f'{rec[SIC.IWOID]}' != itm['id'].split("-")[1]:
                     # first time check
                     if 'created_at' in itm:

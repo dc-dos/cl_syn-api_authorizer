@@ -11,10 +11,12 @@ from urllib.parse import parse_qs, urlencode
 
 import dbc
 
+# log high verosity flag
+DEBUG = os.environ['DEBUG']
 
 #set up logging
 logger = logging.getLogger()
-if os.environ["DEBUG"]:
+if DEBUG:
     logger.setLevel(logging.INFO)
 else:
     logger.setLevel(logging.ERROR)
@@ -31,9 +33,6 @@ SQL = {
     "getEmpid": "select ukey from dwmsidetail where woid = %s",
     "getNotes": "select notes from dwmslot where woid = %s and status != 96"
 }
-
-# log high verosity flag
-DEBUG = True
 
 # HTTP GOOD
 GOOD_RESULTS = ['100','200', 100, 200]
@@ -103,11 +102,13 @@ class WorxProxy(object):
             "action":  ACTIONS[resource],            
             "id": body['id'],
             "access": self.getAccess(body['id']),
-            "comments": body['notes']
         }
 
         if resource == 'accept':
             params["accptopt"] =  body['resolution']
+            params["comments"] = body['notes']
+        else:
+             params["notes"] = body['notes']
 
         # build full url and return http info
         return {
