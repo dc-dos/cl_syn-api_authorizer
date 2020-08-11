@@ -158,7 +158,7 @@ class ReportSection(threading.Thread):
                 if rec[SIC.IFNAME]:
                     # webdir/appid/siteid/images/year/month/prefix-name.ext
                     # add photo to item
-                    dte = rec[SIC.ISTDATE]
+                    dte = rec[SIC.ISTART]
                     uri = f"/{rec[SIC.IWEBDIR]}/{self.conf['rec'][SIC.APPID]}/{rec[SIC.ISITEID]}/images"
                     uri = f"{uri}/{dte.year}/{dte.month}/{rec[SIC.IPREFIX]}-{rec[SIC.IFNAME]}.{rec[SIC.IEXT]}"
                     uri = f"https://{self.conf['rec'][SIC.DOMAIN]}/{uri}"
